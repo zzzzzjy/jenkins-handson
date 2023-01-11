@@ -1,0 +1,3 @@
+resources:
+- sample.yaml
+- service.yaml

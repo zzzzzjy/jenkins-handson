@@ -1,0 +1,159 @@
+/* -------- functions ---------- */
+def notifySlack(STATUS, COLOR) {
+	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+}
+
+pipeline {
+  agent {
+    kubernetes {
+      yamlFile 'deployment/pod-template.yaml'
+      defaultContainer 'maven'
+    }
+  }
+
+  environment {
+      NEW_VERSION = "1.3.0"
+  }
+
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+  }
+
+  stages {
+    stage("git-clone") {
+      steps {
+        script {
+          notifySlack("STARTED", "#FFFF00")
+        }
+                
+        echo "Git clone from gitlab repository"
+
+        git branch: 'dev', url: 'https://gitlab.com/nexweb/jenkins-handson.git'
+      }
+    }
+
+    stage("read properties") {
+      steps {
+        script {
+          def props = readProperties  file:'deployment/pipeline.properties'
+                
+		      // Base Directory
+          env['baseDir'] = props['baseDir']
+          env['baseDeployDir'] = props['baseDeployDir']
+
+		      // Docker Hub Info.
+          env['tag'] = props['version']
+          env['dockerRegistry'] = props['dockerRegistry']
+          env['credentialRegistry']=props['credentialRegistry']
+          env['image'] = props['image']
+              
+		      // Kubernetes
+          
+          // Git commit and push
+
+          def IMAGE_TAG = sh(script: 'echo "dev-$BUILD_NUMBER"', returnStdout: true).trim()
+          def ws = "${WORKSPACE}"
+          env['deployment'] = props['deployment']
+          env['credentialGit'] = props['credentialGit']
+          env['user'] = props['username']
+          env['email'] = props['email']
+          env['imageShortName'] = props['imageShortName']
+          env['gitRepositoryUrl'] = props['gitRepositoryUrl']
+          env['IMAGE_TAG'] = IMAGE_TAG
+          env['commitMessage'] = props['commitMessage']
+          env['WS'] = ws
+        }
+      }
+    }
+
+    stage("build") {
+      steps {
+        container('maven') {
+          echo "Building the application..."   
+          sh "mvn clean package -Dmaven.testSkips=true "
+        }
+      }
+    }
+
+    stage("inspect code") {
+      steps {
+        echo "inspecting the application..."
+      }
+    }
+
+    stage("build and push image") {
+      steps {
+        script {
+          def IMAGE_TAG = sh(script: 'echo "dev-$BUILD_NUMBER"', returnStdout: true).trim()
+          env['IMAGE_TAG'] = IMAGE_TAG
+        }
+        container('docker') {
+          echo "Building and push the image..."
+          withCredentials ([
+            usernamePassword(
+              credentialsId: 'docker-credentials',
+              usernameVariable: 'USER', 
+              passwordVariable: 'PASSWORD'
+            )
+          ]) {
+            echo "some credentials info : ${USER}, ${PASSWORD}"
+            
+            sh "docker login --username ${USER} --password ${PASSWORD} ${dockerRegistry}"
+            sh "docker build -f ./deployment/Dockerfile -t ${image}:${IMAGE_TAG} ."
+            sh "docker push ${image}:${IMAGE_TAG}"   
+          }
+        }
+      }
+    }
+
+		stage('Clone the manifest from git') {
+      steps {
+        git url: 'https://gitlab.com/nexweb/deploy-sample-service.git', branch: 'dev'
+      }
+    }
+
+		stage( "update manifest" ) {
+      steps {
+        container('git') {
+          withCredentials([
+            usernamePassword(
+              credentialsId: "${credentialGit}",
+              usernameVariable: 'GIT_USER',
+              passwordVariable: 'GIT_PASSWORD'
+            )
+          ])
+          {
+            sh("""
+              echo "workspace: ${WS}, ${WORKSPACE}"
+              git config --global user.name "${user}"
+              git config --global user.email "${email}"
+              git config --global --add safe.directory "${WS}"
+              echo "${IMAGE_TAG}"
+              echo 
+              echo "${GIT_USER}:${GIT_PASSWORD}"
+              sed -i 's/$imageShortName:.*/$imageShortName:$IMAGE_TAG/g' "${deployment}"
+              cat "${deployment}" | grep image
+  
+              git add "${deployment}"
+              git commit -m "${commitMessage}:$env.BUILD_NUMBER"
+              git push "https://$GIT_USER:$GIT_PASSWORD@${gitRepositoryUrl}"
+            """)
+          }
+        }
+      }
+		}
+  }
+
+  post {
+    success {
+      script {
+        notifySlack("SUCCESSFUL: Job", "#00FF00")
+      }
+    }
+    failure {
+      script {
+        notifySlack("FAILED: Job", "#FF0000")
+      }
+    }
+  }
+}

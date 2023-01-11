@@ -1,0 +1,34 @@
+pipeline {
+  agent any
+
+  environment {
+      NEW_VERSION = "1.3.0"
+  }
+
+  stages {
+    stage("build") {
+      steps {
+        echo "Building the application..."   
+        echo "Buiding version ${NEW_VERSION}"
+      }
+    }
+
+    stage("inspect code") {
+      steps {
+        echo "inspecting the application..."
+      }
+    }
+
+    stage("build and push image") {
+      steps {
+        echo "Building and push the image..."
+      }
+    }
+
+    stage("deploy") {
+      steps {
+        echo "Deploying the application..."
+      }
+    }
+  }
+}

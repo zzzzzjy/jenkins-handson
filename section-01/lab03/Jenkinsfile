@@ -1,0 +1,45 @@
+pipeline {
+  agent any
+
+  environment {
+      NEW_VERSION = "1.3.0"
+      GIT_COMMIT_ID="${sh(returnStdout: true, script: 'git rev-parse HEAD')}"
+  }
+
+  stages {
+    stage("build") {
+      steps {
+        echo "Building the application..."   
+        echo "Buiding version ${NEW_VERSION}"
+        echo "Building git commit ID:${GIT_COMMIT_ID}"
+      }
+    }
+
+    stage("inspect code") {
+      steps {
+        echo "inspecting the application..."
+      }
+    }
+
+    stage("build and push image") {
+      steps {
+        echo "Building and push the image..."
+        withCredentials ([
+          usernamePassword(
+            credentialsId: 'docker-credentials',
+            usernameVariable: 'DOCKER_HUB_USER', 
+            passwordVariable: 'DOCKER_HUB_PASSWORD'
+          )
+        ]) {
+          echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
+        }
+      }
+    }
+
+    stage("deploy") {
+      steps {
+        echo "Deploying the application..."
+      }
+    }
+  }
+}

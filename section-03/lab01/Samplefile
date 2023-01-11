@@ -1,0 +1,31 @@
+def notifySlack(STATUS, COLOR) {
+	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+}
+pipeline {
+
+  stages {
+    stage("git-clone") {
+      steps {
+        script {
+          notifySlack("Started", "#00FF00")
+        }
+        :
+      }
+    }
+    :
+  }
+
+  post {
+    success {
+      script {
+        notifySlack("${currentBuild.currentResult}", "#00FF00")
+      }
+    }
+
+    failure {
+      script {
+        notifySlack("${currentBuild.currentResult}", "#FF0000")
+      }
+    }
+  }
+}

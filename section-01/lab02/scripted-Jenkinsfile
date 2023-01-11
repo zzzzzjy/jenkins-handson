@@ -1,0 +1,24 @@
+node {
+    try {
+        echo "Hello World"
+        sh "echo test"
+
+        stage('build') {
+            echo "Building the application..."   
+        }
+
+        stage("inspect code") {
+            echo "inspecting the application..."
+        }
+
+        stage("build and push image") {
+            echo "Building and push the image..."
+        }
+
+        stage("deploy") {
+            echo "Deploying the application..."
+        }  
+    } catch(e) {
+        echo "Failed Hello World"  
+    }
+}
