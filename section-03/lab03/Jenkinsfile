@@ -20,7 +20,7 @@ pipeline {
           notifySlack("Started:", "#FFFF00")
         }
         echo "Git clone from gitlab repository"
-        git branch: 'dev', credentialsId: 'github_access_token', url: 'https://github.com/yoonjk/jenkins-handson.git'
+        git branch: 'dev', credentialsId: 'github-access-token', url: 'https://github.com/yoonjk/jenkins-handson.git'
       }
     }
 
