@@ -47,12 +47,12 @@ pipeline {
             passwordVariable: 'DOCKER_HUB_PASSWORD'
           )
         ]) {
-          echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
+		echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
 
-					sh "docker login  --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
-					sh "docker build -f ./deployment/Dockerfile -t ${image}:${tag} ."
-					sh "docker tag ${image}:${tag} ${image}:hello"
-					sh "docker push ${image}:hello"    
+		sh "docker login  --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+		sh "docker build -f ./deployment/Dockerfile -t ${image}:${tag} ."
+		sh "docker tag ${image}:${tag} ${image}:hello"
+		sh "docker push ${image}:hello"    
         }
       }
     }
