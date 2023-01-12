@@ -33,7 +33,7 @@ pipeline {
 
     stage("inspect code") {
       steps {
-        echo "inspecting the application..."
+        echo "inspecting the application."
       }
     }
 
