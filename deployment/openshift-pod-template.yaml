@@ -4,15 +4,12 @@ spec:
   serviceAccountName: jenkins
   containers:  # list of containers that you want present for your build, you can define a default container in the Jenkinsfile
     - name: maven
-      image: maven:3.8.1-jdk-8
-      imagePullPolicy: Always # use cache or pull image for agent
-      command:
-        - sleep
-      args:
-        - 99d
-      env:
-        - name: HOME
-          value: "/root"
+      image: maven:alpine
+      command: ["tail", "-f", "/dev/null"]  # this or any command that is bascially a noop is required, this is so that you don't overwrite the entrypoint of the base container
+      imagePullPolicy: Always # use cache or pull image for agen
+      volumeMounts:
+        - name: maven-repo-vol
+          mountPath: /root/.m2
     - name: buildah
       image: quay.io/buildah/stable
       command:
@@ -57,5 +54,7 @@ spec:
         items:
           - key: .dockerconfigjson
             path: config.json
-
+    - name: maven-repo-vol
+      hostPath:
+        path: /root/.m2
   
