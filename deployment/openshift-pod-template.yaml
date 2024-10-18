@@ -20,7 +20,7 @@ spec:
       volumeMounts:
       - name: varlibcontainers
         mountPath: /var/lib/containers
-      - name: docker-credentials
+      - name: kaniko-secret
         mountPath: /tekton/home/.docker        
       env:
       - name: DOCKER_CONFIG
