@@ -57,4 +57,5 @@ spec:
     - name: maven-repo-vol
       hostPath:
         path: /root/.m2
-  
+    - name: varlibcontainers
+      emptyDir: {} 
