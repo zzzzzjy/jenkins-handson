@@ -75,7 +75,7 @@ pipeline {
     stage("Build & Push Container image") {
 
       steps {
-        container("kaniko") {
+        container("buildah") {
           script
           {
               sh "pwd"
