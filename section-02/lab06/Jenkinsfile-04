@@ -82,7 +82,7 @@ pipeline {
                   cat /kaniko/.docker/config.json                   
                   /kaniko/executor --dockerfile ${dockerFile} \
                   --context . \
-                  --destination ${image}:hello
+                  --destination ${image}:v1
                 '''
           }
         }
