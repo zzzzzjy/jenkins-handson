@@ -79,6 +79,7 @@ pipeline {
           {
               sh "ls -al"
               sh '''
+                  cat /kaniko/.docker/config.json                   
                   /kaniko/executor --dockerfile ${dockerFile} \
                   --context . \
                   --destination ${image}:hello
