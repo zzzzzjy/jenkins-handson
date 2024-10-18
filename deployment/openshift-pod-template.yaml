@@ -6,9 +6,7 @@ spec:
       image: maven:alpine
       command: ["tail", "-f", "/dev/null"]  # this or any command that is bascially a noop is required, this is so that you don't overwrite the entrypoint of the base container
       imagePullPolicy: Always # use cache or pull image for agen
-      volumeMounts:
-        - name: maven-repo-vol
-          mountPath: /root/.m2
+
     - name: buildah
       image: quay.io/buildah/stable
       command:
@@ -17,13 +15,11 @@ spec:
       securityContext:
         privileged: true
       volumeMounts:
-      - name: varlibcontainers
-        mountPath: /var/lib/containers
       - name: kaniko-secret
-        mountPath: /tekton/home/.docker        
+        mountPath: /tekton/home/.docker
       env:
       - name: DOCKER_CONFIG
-        value: /tekton/home/.docker         
+        value: /tekton/home/.docker
     - name: kaniko
       image: gcr.io/kaniko-project/executor:debug
       imagePullPolicy: Always
@@ -34,10 +30,10 @@ spec:
       tty: true
       env:
         - name: DOCKER_CONFIG
-          value: /tekton/.docker
+          value: /tekton/home/.docker
       volumeMounts:
         - name: kaniko-secret
-          mountPath: /tekton/.docker
+          mountPath: /tekton/home/.docker
     - name: openshift-cli
       image: nexweb1/cli:latest
       imagePullPolicy: Always
@@ -53,8 +49,4 @@ spec:
         items:
           - key: .dockerconfigjson
             path: config.json
-    - name: maven-repo-vol
-      hostPath:
-        path: /root/.m2
-    - name: varlibcontainers
-      emptyDir: {} 
+
