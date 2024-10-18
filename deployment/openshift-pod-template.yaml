@@ -34,10 +34,10 @@ spec:
       tty: true
       env:
         - name: DOCKER_CONFIG
-          value: /kaniko/.docker
+          value: /tekton/.docker
       volumeMounts:
         - name: kaniko-secret
-          mountPath: /kaniko/.docker
+          mountPath: /tekton/.docker
     - name: openshift-cli
       image: nexweb1/cli:latest
       imagePullPolicy: Always

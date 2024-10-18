@@ -84,6 +84,7 @@ pipeline {
                   /kaniko/executor --dockerfile ${dockerFile} \
                   --context . \
                   --destination ${image}:hello
+                  --verbosity=debug
                 '''
           }
         }
