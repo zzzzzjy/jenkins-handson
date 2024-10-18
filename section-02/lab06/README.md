@@ -13,4 +13,3 @@ kubectl create secret docker-registry docker-credentials \
 --docker-password=$REGISTRY_PASS \
 --docker-server=$REGISTRY_SERVER \
 --docker-email=$REGISTRY_EMAIL 
-
