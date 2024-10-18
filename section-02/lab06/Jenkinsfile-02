@@ -1,7 +1,7 @@
 pipeline {
   agent {
     kubernetes {
-      yamlFile 'deployment/openshift-pod-template.yaml'
+      yamlFile 'deployment/openshift-pod-template-knowis.yaml'
       cloud 'openshift'
       defaultContainer 'maven'
     }
