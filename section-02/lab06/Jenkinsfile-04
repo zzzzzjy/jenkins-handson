@@ -6,11 +6,17 @@ def notifySlack(STATUS, COLOR) {
 pipeline {
   agent {
     kubernetes {
-      yamlFile 'deployment/openshift-pod-template.yaml'
+      yamlFile 'deployment/pod-template.yaml'
       cloud 'openshift-ibm-cloud'
       defaultContainer 'maven'
     }
   }
+
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '3'))
+    disableConcurrentBuilds()
+  }
+
 
   stages {
 
