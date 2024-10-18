@@ -74,14 +74,16 @@ pipeline {
     stage("Build & Push Container image") {
       steps {
 
-        container("kaniko") {
+        container("buildah") {
           script
           {
               sh "ls -al"
               sh '''             
-                  /kaniko/executor --dockerfile ${dockerFile} \
-                  --context . \
-                  --destination ${image}:hello
+                    #!/usr/bin/env bash
+                    buildah bud --tls-verify=true \
+                                --layers  -f deployment/Dockerfile \
+                                -t ${image}:hello  .
+                    buildah push --tls-verify=true ${image}:hello  
                 '''
           }
         }
