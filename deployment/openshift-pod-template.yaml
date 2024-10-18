@@ -13,6 +13,21 @@ spec:
       env:
         - name: HOME
           value: "/root"
+    - name: buildah
+      image: quay.io/buildah/stable
+      command:
+      - cat
+      tty: true
+      securityContext:
+        privileged: true
+      volumeMounts:
+      - name: varlibcontainers
+        mountPath: /var/lib/containers
+      - name: docker-credentials
+        mountPath: /tekton/home/.docker        
+      env:
+      - name: DOCKER_CONFIG
+        value: /tekton/home/.docker         
     - name: kaniko
       image: gcr.io/kaniko-project/executor:debug
       imagePullPolicy: Always
