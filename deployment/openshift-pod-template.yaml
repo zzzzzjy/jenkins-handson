@@ -21,7 +21,7 @@ spec:
       - name: DOCKER_CONFIG
         value: /tekton/home/.docker
     - name: kaniko
-      image: gcr.io/kaniko-project/executor:debug
+      image: gcr.io/kaniko-project/executor:latest
       imagePullPolicy: Always
       command:
         - sleep
