@@ -6,7 +6,7 @@ def notifySlack(STATUS, COLOR) {
 pipeline {
   agent {
     kubernetes {
-      yamlFile 'deployment/pod-template.yaml'
+      yamlFile 'deployment/openshift-pod-template.yaml'
       cloud 'openshift-ibm-cloud'
       defaultContainer 'maven'
     }
@@ -78,11 +78,10 @@ pipeline {
           script
           {
               sh "ls -al"
-              sh '''
-                  cat /kaniko/.docker/config.json                   
+              sh '''             
                   /kaniko/executor --dockerfile ${dockerFile} \
                   --context . \
-                  --destination ${image}:v1
+                  --destination ${image}:hello
                 '''
           }
         }
