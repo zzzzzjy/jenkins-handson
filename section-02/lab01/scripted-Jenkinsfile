@@ -1,10 +1,11 @@
 node {
 	properties([
-		buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '10'))
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '3')),
+		disableConcurrentBuilds()
 	])
 	
 	stage('Get a Maven project') {
-		git url: 'https://gitlab.com/nexweb/jenkins-handson.git', branch: 'dev'
+		git url: 'https://github.com/yoonjk/jenkins-handson.git', branch: 'dev'
 	}
 
 	stage('Read Properties') {

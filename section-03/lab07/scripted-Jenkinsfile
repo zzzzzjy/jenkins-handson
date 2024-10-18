@@ -1,0 +1,118 @@
+
+def notifySlack(STATUS, COLOR) {
+	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+}
+
+notifySlack("STARTED", "#FFFF00")
+
+podTemplate(
+	containers: [
+		containerTemplate(name: 'maven', image: 'maven:3.8.1-jdk-8', command: 'sleep', args: '99d'),
+		containerTemplate(name: "docker", image: "docker:latest", ttyEnabled: true, command: "cat"),
+		containerTemplate(name: "kubectl", image: "lachlanevenson/k8s-kubectl", command: "cat", ttyEnabled: true),
+		containerTemplate(name: "scanner", image: "newtmitch/sonar-scanner", ttyEnabled: true, command: "cat"),
+		containerTemplate(name: 'podman', image: 'ibmcase/podman:ubuntu-16.04', ttyEnabled: true, command: 'cat', privileged: true)    
+	],
+  //volume mount
+  volumes: [
+		//nfsVolume(mountPath: "/root/.m2", serverAddress: '169.56.100.99', serverPath: '/data/srv/nfs/.m2', readOnly: false)
+    hostPathVolume(mountPath: '/root/.m2', hostPath: '/root/.m2')
+  ]) {
+		node(POD_LABEL) {
+			properties([
+				buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4')),
+				disableConcurrentBuilds()
+			])
+			
+			stage('Get a Maven project') {
+				git credentialsId: 'bitbucket-credentials', branch: 'master', url: 'http://119.81.97.213:8990/scm/boot/jenkins-handson.git'
+			}
+	
+			stage('Read Properties') {
+				// Docker Hub Info.
+        def props = readProperties  file:'deployment/pipeline.properties'
+              
+		    // Base Directory
+        env['baseDir'] = props['baseDir']
+        env['baseDeployDir'] = props['baseDeployDir']
+				    // Docker Hub Info.
+        env['tag'] = props['version']
+        env['dockerRegistry'] = props['dockerRegistry']
+        env['credentialRegistry']=props['credentialRegistry']
+        env['image'] = props['image']
+
+				    // Kubernetes
+        env['deployment'] = props['deployment']
+        env['config'] = props['config']
+        env['service'] = props['service']
+        env['ingress'] = props['ingress']
+        env['selector_key'] = props['selector_key']
+        env['selector_val'] = props['selector_val']
+        env['namespace'] = props['namespace'] 
+			}
+
+		try {
+			// Build Source from Repository in gitlab
+			stage('Build maven project') {
+				echo "**** START : Build maven project"
+				def _dir = pwd();
+				echo "path : ${_dir}"
+				echo "baseDir : ${baseDir}"
+				echo "baseDeployDir : ${baseDeployDir}"
+				sh "ls -al"
+				container('maven') {
+					sh "mvn -B -f ${baseDir} clean package -Dmaven.testSkips=true "
+					echo "*** RESULT ***"
+					sh "pwd"
+					sh "ls -al ${baseDir}/target"
+				}
+			}
+
+			// Build Docker, Push Image to Docker Hub Repository.
+			stage("Build Microservice image") {
+				IMAGE_TAG =  sh(script: 'echo "dev-$BUILD_NUMBER"', returnStdout: true).trim()                      
+				env['IMAGE_TAG'] = IMAGE_TAG
+	
+				container("podman") {
+					withCredentials([
+						usernamePassword(
+							credentialsId: "${credentialRegistry}",
+							usernameVariable: 'DOCKER_HUB_USER',
+							passwordVariable: 'DOCKER_HUB_PASSWORD'
+						)
+					]) 
+					{
+						sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+						sh "podman build -f ./deployment/Dockerfile -t ${image}:${tag} ."
+            sh "podman tag ${image}:${tag} ${image}:hello"
+            sh "podman push ${image}:hello"    
+					}
+				}
+			}
+
+			stage( "Clean Up Existing Deployments" ) {
+				container('kubectl') {
+					sh "kubectl delete deployments -n ${namespace} --selector=${selector_key}=${selector_val}"
+				}
+			}
+
+
+			// Deploy App to Cluster in Kubernetes
+			stage( "Deploy to Cluster" ) {
+				container("kubectl") {
+					sh "kubectl apply -n ${namespace} -f ${deployment}"
+					sh "sleep 5"
+					sh "kubectl apply -n ${namespace} -f ${service}"
+				}
+			}
+
+			echo "**** FINISH ALL STAGES : SUCCESS"
+			notifySlack("${currentBuild.currentResult}", "#00FF00")
+		} catch(e) {
+			echo "**** FINISH ALL STAGES : ${currentBuild.result}"
+			currentBuild.result = "FAILED"
+			notifySlack("${currentBuild.currentResult}", "#FF0000")
+		}	
+  }
+}
+

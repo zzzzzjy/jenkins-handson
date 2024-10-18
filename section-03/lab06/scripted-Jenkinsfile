@@ -1,10 +1,7 @@
-def label = "my_channel-${UUID.randomUUID().toString()}"
 
-/* -------- functions ---------- */
 def notifySlack(STATUS, COLOR) {
-	slackSend (channel: '#my_channel', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
 }
-/* ------------------------------ */
 
 notifySlack("STARTED", "#FFFF00")
 
@@ -23,7 +20,8 @@ podTemplate(
   ]) {
 		node(POD_LABEL) {
 			properties([
-				buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '10'))
+				buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4')),
+				disableConcurrentBuilds()
 			])
 			
 			stage('Get a Maven project') {
@@ -32,27 +30,25 @@ podTemplate(
 	
 			stage('Read Properties') {
 				// Docker Hub Info.
-				def props = readProperties  file:"deployment/pipeline.properties"
-				env['tag'] = props["version"]
-				env['dockerRegistry'] = props["dockerRegistry"]
-				env['credentialRegistry']=props["credentialRegistry"]
-				env['image'] = props["image"]
+        def props = readProperties  file:'deployment/pipeline.properties'
+              
+		    // Base Directory
+        env['baseDir'] = props['baseDir']
+        env['baseDeployDir'] = props['baseDeployDir']
+				    // Docker Hub Info.
+        env['tag'] = props['version']
+        env['dockerRegistry'] = props['dockerRegistry']
+        env['credentialRegistry']=props['credentialRegistry']
+        env['image'] = props['image']
 
-				// base Directory
-				env['baseDir'] = props["baseDir"]
-				env['baseDeployDir'] = props["baseDeployDir"]
-	
-				// commit and push
-				def ws = "${WORKSPACE}"
-				env['credentialGit']=props["credentialGit"]
-				env['user'] = props["username"]
-				env['email'] = props["email"]
-
-				env['imageShortName'] = props["imageShortName"]
-				env['deployment'] = props["deployment"]
-				env['gitRepositoryUrl'] = props["gitRepositoryUrl"]
-				env['commitMessage'] = props["commitMessage"]
-				env['WS'] = ws
+				    // Kubernetes
+        env['deployment'] = props['deployment']
+        env['config'] = props['config']
+        env['service'] = props['service']
+        env['ingress'] = props['ingress']
+        env['selector_key'] = props['selector_key']
+        env['selector_val'] = props['selector_val']
+        env['namespace'] = props['namespace'] 
 			}
 
 		try {
@@ -87,50 +83,35 @@ podTemplate(
 					]) 
 					{
 						sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
-						sh "podman build -f ./deployment/Dockerfile -t ${image}:${IMAGE_TAG} ."
-						sh "podman push ${image}:${IMAGE_TAG}"
+						sh "podman build -f ./deployment/Dockerfile -t ${image}:${tag} ."
+            sh "podman tag ${image}:${tag} ${image}:hello"
+            sh "podman push ${image}:hello"    
 					}
 				}
 			}
 
-			stage('Clone the manifest from git') {
-				git url: 'https://gitlab.com/nexweb/deploy-sample-service.git', branch: 'dev'
+			stage( "Clean Up Existing Deployments" ) {
+				container('kubectl') {
+					sh "kubectl delete deployments -n ${namespace} --selector=${selector_key}=${selector_val}"
+				}
 			}
 
-			stage( "Update manifest" ) {
-				withCredentials([
-					usernamePassword(
-						credentialsId: "${credentialGit}",
-						usernameVariable: 'GIT_USER',
-						passwordVariable: 'GIT_PASSWORD'
-					)
-				]) 
-				{            
-					sh("""
-						echo "workspace: ${WS}, ${WORKSPACE}"
-						git config --global user.name "${user}"
-						git config --global user.email "${email}"
-						git config --global --add safe.directory "${WS}"
-						echo "Image tag : ${IMAGE_TAG}"
-						echo 
-						echo "Credentials => ${GIT_USER}:${GIT_PASSWORD}"
-						sed -i 's/$imageShortName:.*/$imageShortName:$IMAGE_TAG/g' "${deployment}"
-						cat "${deployment}" | grep image
 
-						git add "${deployment}"
-						git commit -m "${commitMessage}:$IMAGE_TAG"
-						git push "https://$GIT_USER:$GIT_PASSWORD@${gitRepositoryUrl}"
-					""")
-				} 
+			// Deploy App to Cluster in Kubernetes
+			stage( "Deploy to Cluster" ) {
+				container("kubectl") {
+					sh "kubectl apply -n ${namespace} -f ${deployment}"
+					sh "sleep 5"
+					sh "kubectl apply -n ${namespace} -f ${service}"
+				}
 			}
 
 			echo "**** FINISH ALL STAGES : SUCCESS"
-			echo "**** Success NotifySlack"	
 			notifySlack("${currentBuild.currentResult}", "#00FF00")
 		} catch(e) {
+			echo "**** FINISH ALL STAGES : ${currentBuild.result}"
 			currentBuild.result = "FAILED"
 			notifySlack("${currentBuild.currentResult}", "#FF0000")
-			//notifyMail("${currentBuild.currentResult}", "${email_recipients}")
 		}	
   }
 }

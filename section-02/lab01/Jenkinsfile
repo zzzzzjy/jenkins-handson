@@ -1,35 +1,47 @@
 pipeline {
   agent any 
 
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4'))
+    disableConcurrentBuilds()
+  }
+  
   environment {
       NEW_VERSION = "1.3.0"
       dockerRegistry="https://index.docker.io/v1/"
       tag="0.1.2"
       image="nexweb1/sample"
+      namespace="default"
+      deployment="deployment/sample.yaml"
+      service="deployment/service.yaml"
   }
 
+  tools {
+    maven 'maven'
+  }
+  
   stages {
-    stage("git-clone") {
+    stage("Git-clone") {
       steps {
         echo "Git clone from gitlab repository"
-        git branch: 'dev', url: 'https://gitlab.com/nexweb/jenkins-handson.git'
+        git branch: 'dev', url: 'https://github.com/yoonjk/jenkins-handson.git'
       }
     }
 
-    stage("build") {
+    stage("Build/Test") {
       steps {
         echo "Building the application..."   
         sh "mvn clean package -Dmaven.testSkips=true "
       }
     }
 
-    stage("inspect code") {
+    stage("Code Analysis") {
       steps {
         echo "inspecting the application..."
       }
     }
 
-    stage("build and push image") {
+    stage("Build and Push") {
       steps {
         echo "Building and push the image..."
         withCredentials ([
@@ -41,17 +53,20 @@ pipeline {
         ]) {
           echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
 
-					sh "docker login  --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
-					sh "docker build -f ./deployment/Dockerfile -t ${image}:${tag} ."
-					sh "docker tag ${image}:${tag} ${image}:hello"
-					sh "docker push ${image}:hello"    
+					sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+					sh "podman build  -t ${image}:${tag} . -f deployment/Dockerfile"
+					sh "podman tag ${image}:${tag} ${image}:hello"
+					sh "podman push ${image}:hello"    
         }
       }
     }
 
-    stage("deploy") {
+    stage("Deploy") {
       steps {
-        echo "Deploying the application..."
+          echo "Delete deployment... "
+          sh "kubectl apply -n ${namespace} -f ${deployment}"
+          sh "sleep 3"
+          sh "kubectl apply -n ${namespace} -f ${service}"
       }
     }
   }

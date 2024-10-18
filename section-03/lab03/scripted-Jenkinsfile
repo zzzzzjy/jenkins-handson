@@ -1,16 +1,17 @@
 /* -------- functions ---------- */
 def notifySlack(STATUS, COLOR) {
-	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+	slackSend (channel: '#my-channel', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
 }
 
 notifySlack('Started', '#FFFF00')
-node('slave1') {
+node {
 	properties([
-		buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '10'))
+		buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4')),
+		disableConcurrentBuilds()
 	])
 	
 	stage('Get a Maven project') {
-		git branch: 'dev', credentialsId: 'github-access-token', url: 'https://github.com/yoonjk/jenkins-handson.git'
+		git url: 'https://github.com/yoonjk/jenkins-handson.git', credentialsId: 'github-access-token', branch: 'dev'
 	}
 
 	stage('Read Properties') {
@@ -67,6 +68,37 @@ node('slave1') {
 				sh "podman push ${image}:${IMAGE_TAG}"
 			}
 		}
+
+		stage('Clone the manifest from git') {
+			git url: 'https://gitlab.com/nexweb/deploy-sample-service.git', branch: 'dev'
+		}
+
+		stage( "Update manifest" ) {
+			withCredentials([
+				usernamePassword(
+					credentialsId: "${credentialGit}",
+					usernameVariable: 'GIT_USER',
+					passwordVariable: 'GIT_PASSWORD'
+				)
+			]) 
+			{            
+				sh("""
+					echo "workspace: ${WS}, ${WORKSPACE}"
+					git config --global user.name "${user}"
+					git config --global user.email "${email}"
+					git config --global --add safe.directory "${WS}"
+					echo "Image tag : ${IMAGE_TAG}"
+					echo 
+					echo "Credentials => ${GIT_USER}:${GIT_PASSWORD}"
+					sed -i 's/$imageShortName:.*/$imageShortName:$IMAGE_TAG/g' "${deployment}"
+					cat "${deployment}" | grep image
+					git add "${deployment}"
+					git commit -m "${commitMessage}:$IMAGE_TAG"
+					git push "https://$GIT_USER:$GIT_PASSWORD@${gitRepositoryUrl}"
+				""")
+			} 
+		}
+				
 		echo "**** FINISH ALL STAGES : SUCCESS"
 		echo "**** Success NotifySlack"	
 		notifySlack("${currentBuild.currentResult}", "#00FF00")

@@ -1,0 +1,11 @@
+@Library('shared-library') _
+pipeline {
+    agent any
+    stages {
+        stage('example') {
+            steps {
+                notifySlack('Started', '#FFFF00')
+            }
+        }
+    }
+}

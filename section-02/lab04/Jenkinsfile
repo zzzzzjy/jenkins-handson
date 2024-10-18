@@ -1,19 +1,24 @@
 pipeline {
-  agent { label 'slave1' } 
+  agent any
 
   environment {
       NEW_VERSION = "1.3.0"
   }
 
+  tools {
+    maven 'maven'
+  }
+  
   options {
-    buildDiscarder(logRotator(numToKeepStr: '10'))
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4'))
+    disableConcurrentBuilds()
   }
 
   stages {
     stage("git-clone") {
       steps {
         echo "Git clone from gitlab repository"
-        git branch: 'dev', url: 'https://gitlab.com/nexweb/jenkins-handson.git'
+        git branch: 'dev', url: 'https://github.com/yoonjk/jenkins-handson.git'
       }
     }
 
@@ -31,12 +36,12 @@ pipeline {
           env['dockerRegistry'] = props['dockerRegistry']
           env['credentialRegistry']=props['credentialRegistry']
           env['image'] = props['image']
-              
+          env['WS'] = "${WORKSPACE}"    
           // Kubernetes
           // Git commit and push
           env['deployment'] = props['deployment']
           env['credentialGit'] = props['credentialGit']
-          env['user'] = props['user']
+          env['user'] = props['username']
           env['email'] = props['email']
           env['imageShortName'] = props['imageShortName']
           env['gitRepositoryUrl'] = props['gitRepositoryUrl']
@@ -75,12 +80,19 @@ pipeline {
         ]) {
           echo "some credentials info : ${USER}, ${PASSWORD}"
 
-          sh "docker login --username ${USER} --password ${PASSWORD} ${dockerRegistry}"
-          sh "docker build -f ./deployment/Dockerfile -t ${image}:${IMAGE_TAG} ."
-          sh "docker push ${image}:${IMAGE_TAG}"    
+          sh "podman login --tls-verify=false --username ${USER} --password ${PASSWORD} ${dockerRegistry}"
+          sh "podman build -t ${image}:${IMAGE_TAG} . -f ./deployment/Dockerfile"
+          sh "podman push ${image}:${IMAGE_TAG}"    
         }
       }
     }
+
+  	stage('Clone the manifest from git') {
+      steps {
+        git url: 'https://gitlab.com/nexweb/deploy-sample-service.git', branch: 'dev'
+      }
+    }
+  
 
 		stage( "update manifest" ) {
       steps {
@@ -94,7 +106,7 @@ pipeline {
           sh("""
             git config --global user.name "${user}"
             git config --global user.email "${email}"
-    
+
             echo "${IMAGE_TAG}"
             echo 
             echo "${GIT_USER}:${GIT_PASSWORD}"
@@ -103,7 +115,7 @@ pipeline {
 
             git add "${deployment}"
             git commit -m "${commitMessage}:$IMAGE_TAG"
-            git push "https://$GIT_USER:$GIT_PASSWORD@$gitRepositoryUrl"
+            git push --set-upstream "https://$GIT_USER:$GIT_PASSWORD@$gitRepositoryUrl" dev
           """)
         }
       }

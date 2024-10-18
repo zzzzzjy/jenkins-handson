@@ -1,0 +1,15 @@
+pipeline {
+  agent any
+  triggers {
+    cron(' * * * * *')
+  }
+
+  stages {
+    stage('Hello') {
+      steps {
+        echo "Hello WOrld - team-a -test"
+        sleep 3
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+pipeline {
+  agent {
+    kubernetes {
+      yamlFile 'deployment/openshift-pod-template.yaml'
+      cloud 'openshift'
+      defaultContainer 'maven'
+    }
+  }
+
+  stages {
+    stage('Git-clone') {
+      steps {
+        git branch: 'dev', url : 'https://github.com/yoonjk/jenkins-handson.git'
+      }
+    }
+    
+    stage('Read Properties') {
+      steps {
+        script {
+          def props = readProperties  file:'deployment/pipeline.properties'
+          
+              // Base Directory
+              env['baseDir'] = props['baseDir']
+              env['baseDeployDir'] = props['baseDeployDir']
+
+          // Docker Hub Info.
+              env['tag'] = props['version']
+              env['dockerRegistry'] = props['dockerRegistry']
+              env['credentialRegistry'] = props['credentialRegistry']
+              env['image'] = props['image']
+              env['dockerFile']=props['dockerFile']
+                  
+              // Kubernetes
+              env['deployment'] = props['deployment']
+              env['config'] = props['config']
+              env['service'] = props['service']
+              env['ingress'] = props['ingress']
+              env['selector_key'] = props['selector_key']
+              env['selector_val'] = props['selector_val']
+              env['namespace'] = 'education'
+              env['apiserver'] = props['knowis-apiserver']
+        }
+      }
+    }
+	
+    stage('Build a Maven project') {
+      steps {
+        container('maven') {
+          script {
+            echo "namespace:${namespace}"
+            sh 'pwd'
+            sh 'mvn -B clean package -Dmaven.repo.local=/tmp/m2/repository'
+          }
+        }
+      }
+    }
+
+    // Build Docker, Push Image to Docker Hub Repository.
+    stage("Build & Push Container image") {
+      environment {
+        BUILDVERSION = sh(script: "echo `date +%Y%m%d_%H%M%S -d '+9 hour'`", returnStdout: true).trim()
+      }
+      steps {
+
+        container("kaniko") {
+          script
+          {
+              def IMAGE_TAG =  sh(script: 'echo "dev-$BUILD_NUMBER"', returnStdout: true).trim()
+              
+              env['IMAGE_TAG'] = IMAGE_TAG
+              echo "========= imageTag:${BUILDVERSION}"
+              sh "pwd"
+              sh "ls -al"
+              sh '''
+                  /kaniko/executor --dockerfile ${dockerFile} \
+                  --context . \
+                  --destination ${image}:hello
+                '''
+          }
+        }
+      }
+    }
+    stage('Deploy') {
+      steps {
+        container('openshift-cli') {
+            script {
+                  withCredentials([string(credentialsId: 'openshift-token', variable: 'secret')]) {
+                    echo "My secret text is '${secret}'"
+                    
+                    sh "oc login --token='${secret}' --server=${apiserver}"
+                    sh "oc project"
+                    sh "oc apply -f ${deployment} -n ${namespace}"
+                }
+            }
+        }
+      }
+    }
+  }
+}

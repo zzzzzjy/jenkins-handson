@@ -1,0 +1,77 @@
+node {
+	properties([
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4')),
+		disableConcurrentBuilds()
+	])
+	
+	stage('Get a Maven project') {
+		git url: 'https://gitlab.com/nexweb/sample-service.git', branch: 'nexus'
+	}
+
+	stage('Read Properties') {
+		// Docker Hub Info.
+		def props = readProperties  file:"deployment/pipeline.properties"
+		env['tag'] = props["version"]
+		env['dockerRegistry'] = props["dockerRegistry"]
+		env['credentialRegistry']=props["credentialRegistry"]
+		env['image'] = props["image"]
+		// base Directory
+		env['baseDir'] = props["baseDir"]
+		env['baseDeployDir'] = props["baseDeployDir"]
+		// commit and push
+		def ws = "${WORKSPACE}"
+		env['credentialGit']=props["credentialGit"]
+		env['user'] = props["username"]
+		env['email'] = props["email"]
+		env['imageShortName'] = props["imageShortName"]
+		env['deployment'] = props["deployment"]
+		env['gitRepositoryUrl'] = props["gitRepositoryUrl"]
+		env['commitMessage'] = props["commitMessage"]
+		env['WS'] = ws
+	}
+
+	try {
+		// Build Source from Repository in gitlab
+		stage('Build maven project') {
+			echo "**** START : Build maven project"
+			def _dir = pwd();
+			echo "path : ${_dir}"
+			echo "baseDir : ${baseDir}"
+			echo "baseDeployDir : ${baseDeployDir}"
+			sh "ls -al"
+			sh "mvn -B -f ${baseDir} clean package -Dmaven.testSkips=true "
+			echo "*** RESULT ***"
+			sh "pwd"
+			sh "ls -al ${baseDir}/target"
+		}
+
+		stage('deploy app to Nexus') {
+			echo "**** START : deploy maven app to nexus"	
+			sh "mvn deploy"
+		}
+
+		// Build Docker, Push Image to Docker Hub Repository.
+		stage("Build Microservice image") {
+			IMAGE_TAG =  sh(script: 'echo "dev-$BUILD_NUMBER"', returnStdout: true).trim()                      
+			env['IMAGE_TAG'] = IMAGE_TAG
+			withCredentials([
+				usernamePassword(
+					credentialsId: "${credentialRegistry}",
+					usernameVariable: 'DOCKER_HUB_USER',
+					passwordVariable: 'DOCKER_HUB_PASSWORD'
+				)
+			]) 
+			{
+				sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+				sh "podman build -f ./deployment/Dockerfile -t ${image}:${IMAGE_TAG} ."
+				sh "podman push ${image}:${IMAGE_TAG}"
+			}
+		}
+
+		echo "**** FINISH ALL STAGES : SUCCESS"
+	} catch(e) {
+		currentBuild.result = "FAILED"
+    echo "**** FINISH ALL STAGES : ${currentBuild.result}"
+	}	
+}
+

@@ -1,12 +1,13 @@
 /* -------- functions ---------- */
 def notifySlack(STATUS, COLOR) {
-	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+	slackSend (channel: '#my-channel', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
 }
 
 notifySlack('Started', '#FFFF00')
 node {
 	properties([
-		buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '10'))
+		buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4')),
+		disableConcurrentBuilds()
 	])
 	
 	stage('Get a Maven project') {

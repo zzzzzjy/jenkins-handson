@@ -1,0 +1,31 @@
+def issue = [fields: [ project: [key: 'BOOT'],
+                         summary: 'New JIRA Created from Jenkins.',
+                         description: 'New JIRA Created from Jenkins.',
+                         issuetype: [name: 'Task']]]
+  def newIssue = jiraNewIssue issue: issue, site: 'JIRA'
+
+
+void comment_issues(message) {
+    def issue_pattern = "BOOT-\\d+"
+
+    //jiraAddComment idOrKey: 'BOOT-1', comment: message, site: 'JIRA'
+    jiraComment body: message, issueKey: 'BOOT-1'
+}
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Hello') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+    }
+    post {
+        always {
+            comment_issues("${JOB_NAME}:${currentBuild.currentResult}")
+            echo newIssue.data.key
+        }
+    }
+}

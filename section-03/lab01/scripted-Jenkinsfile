@@ -1,6 +1,6 @@
 
 def notifySlack(STATUS, COLOR) {
-	slackSend (channel: '#car_inspection', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+	slackSend (channel: '#my_channel', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
 }
 
 notifySlack("STARTED", "#FFFF00")
@@ -20,7 +20,8 @@ podTemplate(
   ]) {
 		node(POD_LABEL) {
 			properties([
-				buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '10'))
+				buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4')),
+				disableConcurrentBuilds()
 			])
 			
 			stage('Get a Maven project') {
@@ -29,25 +30,25 @@ podTemplate(
 	
 			stage('Read Properties') {
 				// Docker Hub Info.
-        		def props = readProperties  file:'deployment/pipeline.properties'
+        def props = readProperties  file:'deployment/pipeline.properties'
               
-		    	// Base Directory
-        		env['baseDir'] = props['baseDir']
-        		env['baseDeployDir'] = props['baseDeployDir']
+		    // Base Directory
+        env['baseDir'] = props['baseDir']
+        env['baseDeployDir'] = props['baseDeployDir']
 				    // Docker Hub Info.
-        		env['tag'] = props['version']
-        		env['dockerRegistry'] = props['dockerRegistry']
-        		env['credentialRegistry']=props['credentialRegistry']
-        		env['image'] = props['image']
+        env['tag'] = props['version']
+        env['dockerRegistry'] = props['dockerRegistry']
+        env['credentialRegistry']=props['credentialRegistry']
+        env['image'] = props['image']
 
 				    // Kubernetes
-        		env['deployment'] = props['deployment']
-        		env['config'] = props['config']
-        		env['service'] = props['service']
-        		env['ingress'] = props['ingress']
-        		env['selector_key'] = props['selector_key']
-        		env['selector_val'] = props['selector_val']
-        		env['namespace'] = props['namespace'] 
+        env['deployment'] = props['deployment']
+        env['config'] = props['config']
+        env['service'] = props['service']
+        env['ingress'] = props['ingress']
+        env['selector_key'] = props['selector_key']
+        env['selector_val'] = props['selector_val']
+        env['namespace'] = props['namespace'] 
 			}
 
 		try {
@@ -83,8 +84,8 @@ podTemplate(
 					{
 						sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
 						sh "podman build -f ./deployment/Dockerfile -t ${image}:${tag} ."
-            			sh "podman tag ${image}:${tag} ${image}:hello"
-            			sh "podman push ${image}:hello"    
+            sh "podman tag ${image}:${tag} ${image}:hello"
+            sh "podman push ${image}:hello"    
 					}
 				}
 			}

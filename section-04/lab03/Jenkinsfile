@@ -1,0 +1,17 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_CREDS = credentials('docker-credentials')
+    }
+    stages {
+        stage('Example') {
+            steps {
+                /* WRONG! */
+                sh("""
+                echo "user:${DOCKER_CREDS_USR}"
+                curl -u ${DOCKER_CREDS_USR}:${DOCKER_CREDS_PSW} https://example.com/
+                """)
+            }
+        }
+    }
+}

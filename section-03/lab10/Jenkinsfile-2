@@ -1,0 +1,72 @@
+pipeline {
+  agent { label 'linux'}
+
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4'))
+    disableConcurrentBuilds()
+  }
+  
+  environment {
+      NEW_VERSION = "1.3.0"
+      dockerRegistry="https://index.docker.io/v1/"
+      tag="0.1.2"
+      image="nexweb1/sample"
+      CI = true
+      ARTIFACTORY_ACCESS_TOKEN = credentials('artifactory-access-token')
+  }
+
+  tools {
+    maven 'maven'
+    jfrog 'jfrog-cli'
+  }
+
+  stages {
+    stage("git-clone") {
+      steps {
+        echo "Git clone from gitlab repository"
+        git branch: 'dev', url: 'https://gitlab.com/nexweb/jenkins-handson.git'
+      }
+    }
+
+    stage("build") {
+      steps {
+        echo "Building the application..."   
+        sh "mvn clean package -Dmaven.testSkips=true "
+      }
+    }
+
+    stage("inspect code") {
+      steps {
+        echo "inspecting the application..."
+      }
+    }
+
+    stage("build and push image") {
+      steps {
+        echo "Building and push the image..."
+        withCredentials ([
+          usernamePassword(
+            credentialsId: 'docker-credentials',
+            usernameVariable: 'DOCKER_HUB_USER', 
+            passwordVariable: 'DOCKER_HUB_PASSWORD'
+          )
+        ]) {
+          echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
+
+					sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+					sh "podman build  -t ${image}:${tag} . -f deployment/Dockerfile"
+					sh "podman tag ${image}:${tag} ${image}:hello"
+					sh "podman push ${image}:hello"    
+        }
+      }
+    }
+
+    stage("publish artifact") {
+      steps {
+        echo "jfrog test"
+        sh "ls -al"
+        sh 'jf rt u --url=http://119.81.103.70:8081/artifactory --access-token="${ARTIFACTORY_ACCESS_TOKEN}" "target/*.jar" libs-snapshot-local/ --sync-deletes "libs-snapshot-local/"'
+      }
+    }
+  }
+}

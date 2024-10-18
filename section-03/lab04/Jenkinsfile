@@ -1,0 +1,174 @@
+def notifySlack(STATUS, COLOR) {
+	slackSend (channel: '#my-channel', color: COLOR, message: STATUS+" : " +  "${env.JOB_NAME} [${env.BUILD_NUMBER}] (${env.BUILD_URL})")
+}
+
+pipeline {
+  agent {
+    kubernetes {
+      yamlFile 'deployment/pod-template.yaml'
+      defaultContainer 'maven'
+    }
+  }
+  
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4'))
+    disableConcurrentBuilds()
+  }
+
+  tools {
+    maven 'maven'
+  }
+  
+  environment {
+    NEW_VERSION = "1.3.0"
+  }
+
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+  }
+  
+  stages {
+    stage("git-clone") {
+      steps {
+        script {
+          notifySlack("Started", "#00FF00")
+        }  
+        echo "Git clone from gitlab repository"
+        git branch: 'dev', url: 'https://gitlab.com/nexweb/jenkins-handson.git'
+      }
+    }
+
+    stage("read properties") {
+      steps {
+        script {
+          def props = readProperties  file:'deployment/pipeline.properties'
+                
+		      // Base Directory
+          env['baseDir'] = props['baseDir']
+          env['baseDeployDir'] = props['baseDeployDir']
+
+		      // Docker Hub Info.
+          env['tag'] = props['version']
+          env['dockerRegistry'] = props['dockerRegistry']
+          env['credentialRegistry']=props['credentialRegistry']
+          env['image'] = props['image']
+              
+		      // Kubernetes
+          env['deployment'] = props['deployment']
+          env['config'] = props['config']
+          env['service'] = props['service']
+          env['ingress'] = props['ingress']
+          env['selector_key'] = props['selector_key']
+          env['selector_val'] = props['selector_val']
+          env['namespace'] = props['namespace'] 
+        }
+      }
+    }
+
+    stage("build") {
+      steps {
+        echo "Building the application..."   
+        sh "mvn clean package -Dmaven.testSkips=true "
+      }
+    }
+
+    stage("SonarQube Analysis code") {
+      steps {
+        echo "inspecting the application..."
+				container("scanner") {
+          withSonarQubeEnv('sonarqube') {
+            sh ("""
+              sonar-scanner \
+              -Dsonar.projectName=sample-service \
+              -Dsonar.projectKey=sample-service \
+              -Dsonar.report.export.path=sonar-report.json \
+              -Dsonar.sources=src/main/java \
+              -Dsonar.projectBaseDir=${baseDir} \
+              -Dsonar.language=java \
+              -Dsonar.java.sourcesion=1.0 \
+              -Dsonar.sourceEncoding=UTF-8 \
+              -Dsonar.java.binaries=target/classes \
+              -Dsonar.host.url=http://119.81.97.213:9000 \
+              -Dsonar.login=sqp_7131cd74a892ad252b3adf2908ab31d647e8e673
+            """)
+          }
+				}
+      }
+    }
+
+    stage('SonarQube Quality Gate'){
+      steps{
+        timeout(time: 10, unit: 'MINUTES') {
+          script{
+            echo "Start SonarQube Quality Gate"
+            def qualityGate = waitForQualityGate()
+            echo "Status: ${qualityGate.status}"
+
+            if(qualityGate.status != 'OK') {
+              echo "NOT OK Status: ${qualityGate.status}"
+              error "Pipeline aborted due to quality gate failure: ${qualityGate.status}"
+            } else{
+              echo "OK Status: ${qualityGate.status}"
+            }
+            echo "End SonarQube Quality Gate"
+          }
+        }
+      }
+    }    
+
+    stage("build and push image") {
+      steps {
+        container('docker') {
+          echo "Building and push the image..."
+          withCredentials ([
+            usernamePassword(
+              credentialsId: "${credentialRegistry}",
+              usernameVariable: 'DOCKER_HUB_USER', 
+              passwordVariable: 'DOCKER_HUB_PASSWORD'
+            )
+          ]) {
+            echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
+  
+            sh "docker login --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+            sh "docker build -f ./deployment/Dockerfile -t ${image}:${tag} ."
+            sh "docker tag ${image}:${tag} ${image}:hello"
+            sh "docker push ${image}:hello"    
+          }
+        }
+      }
+    }
+
+		stage( "Clean Up Existing Deployments" ) {
+      steps {
+        container('kubectl') {
+          sh "kubectl delete deployments -n ${namespace} --selector=${selector_key}=${selector_val}"
+        }
+      }
+		}
+
+		// Deploy App to Cluster in Kubernetes
+		stage( "Deploy to Cluster" ) {
+      steps {
+        container('kubectl') {
+          sh "kubectl apply -n ${namespace} -f ${deployment}"
+          sh "sleep 5"
+          sh "kubectl apply -n ${namespace} -f ${service}"
+        }
+      }
+		}
+  }
+
+  post {
+    success {
+      script {
+        notifySlack("${currentBuild.currentResult}", "#00FF00")
+      }
+    }
+
+    failure {
+      script {
+        notifySlack("${currentBuild.currentResult}", "#FF0000")
+      }
+    }
+  }   
+}

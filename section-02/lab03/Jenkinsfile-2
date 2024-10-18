@@ -1,0 +1,88 @@
+pipeline {
+    agent {
+    kubernetes {
+      yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:  # list of containers that you want present for your build, you can define a default container in the Jenkinsfile
+    - name: maven
+      image: maven:alpine
+      command: ["tail", "-f", "/dev/null"]  # this or any command that is bascially a noop is required, this is so that you don't overwrite the entrypoint of the base container
+      imagePullPolicy: Always # use cache or pull image for agen
+      volumeMounts:
+        - name: maven-repo-vol
+          mountPath: /root/.m2
+    - name: git
+      image: alpine/git
+      imagePullPolicy: Always 
+      command: ["tail", "-f", "/dev/null"] 
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:debug
+      command:
+        - sleep
+      args:
+        - 9999999
+      volumeMounts:
+        - name: kaniko-secret
+          mountPath: /kaniko/.docker
+    - name: kubectl
+      image: lachlanevenson/k8s-kubectl
+      imagePullPolicy: Always     
+      command: ["cat"]
+      tty: true
+    - name: scanner
+      image: newtmitch/sonar-scanner
+      imagePullPolicy: Always
+      command: ["cat"]
+      tty: true
+    - name: podman
+      image: ibmcase/podman:ubuntu-16.04
+      imagePullPolicy: Always
+      command: ["cat"]
+      tty: true
+      privileged: true
+  volumes:
+    - name: kaniko-secret
+      secret:
+        secretName: regcred
+        items:
+          - key: .dockerconfigjson
+            path: config.json    
+    - name: maven-repo-vol
+      hostPath:
+        path: /root/.m2
+'''
+    }
+  }
+    stages {
+        stage ('Clone') {
+            steps {
+                container('maven')  {
+                    git url: 'https://github.com/yoonjk/jenkins-handson.git', branch: 'dev'
+                }
+            }
+        }
+
+        stage ('build') {
+            steps {
+                container('maven')  {
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+
+        stage ('Exec Kaniko') {
+            steps { 
+                container('kaniko') {
+                    sh '''
+                        cat /kaniko/.docker/config.json
+                        /kaniko/executor --dockerfile deployment/Dockerfile --context `pwd` --destination nexweb1/sample:hello-debug 
+
+                    '''
+                }
+            }
+        }
+    }
+}

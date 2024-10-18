@@ -1,0 +1,6 @@
+@Library('shared-library') _
+node {
+    stage('example') {
+        notifySlack('Started', '#FFFF00')
+    }
+}

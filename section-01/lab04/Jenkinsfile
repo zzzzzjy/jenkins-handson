@@ -1,0 +1,15 @@
+pipeline {
+	stages {
+
+		stage("Build") {
+			environment {
+				DOCKER_CREDENTIALS = credentials('docker-credentials')
+			}			
+
+			steps {
+				sh "echo 'My docker credentials username:$DOCKER_CREDENTIALS_USR'"
+				sh "echo 'My Docker credentials password:$DOCKER_CREDENTIALS_PSW'"
+			}
+		}
+	}
+}

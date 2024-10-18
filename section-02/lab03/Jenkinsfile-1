@@ -1,0 +1,111 @@
+pipeline {
+  agent {
+    kubernetes {
+      yamlFile 'deployment/pod-template.yaml'
+      defaultContainer 'maven'
+    }
+  }
+
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4'))
+    disableConcurrentBuilds()
+  }
+
+  tools {
+    maven 'maven'
+  }
+
+  environment {
+    NEW_VERSION = "1.3.0"
+  }
+  
+  stages {
+    stage("git-clone") {
+      steps {
+        echo "Git clone from gitlab repository"
+        git branch: 'dev', url: 'https://github.com/yoonjk/jenkins-handson.git'
+      }
+    }
+
+    stage("read properties") {
+      steps {
+        script {
+          def props = readProperties  file:'deployment/pipeline.properties'
+                
+		      // Base Directory
+          env['baseDir'] = props['baseDir']
+          env['baseDeployDir'] = props['baseDeployDir']
+
+		      // Docker Hub Info.
+          env['tag'] = props['version']
+          env['dockerRegistry'] = props['dockerRegistry']
+          env['credentialRegistry']=props['credentialRegistry']
+          env['image'] = props['image']
+              
+		      // Kubernetes
+          env['deployment'] = props['deployment']
+          env['config'] = props['config']
+          env['service'] = props['service']
+          env['ingress'] = props['ingress']
+          env['selector_key'] = props['selector_key']
+          env['selector_val'] = props['selector_val']
+          env['namespace'] = props['namespace'] 
+        }
+      }
+    }
+
+    stage("build") {
+      steps {
+        echo "Building the application..."   
+        sh "mvn clean package -Dmaven.testSkips=true "
+      }
+    }
+
+    stage("inspect code") {
+      steps {
+        echo "inspecting the application..."
+      }
+    }
+
+    stage("build and push image") {
+      steps {
+        container('podman') {
+          echo "Building and push the image..."
+          withCredentials ([
+            usernamePassword(
+              credentialsId: 'docker-credentials',
+              usernameVariable: 'DOCKER_HUB_USER', 
+              passwordVariable: 'DOCKER_HUB_PASSWORD'
+            )
+          ]) {
+            echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
+  
+            sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+            sh "podman build  -t ${image}:${tag} . -f deployment/Dockerfile"
+            sh "podman tag ${image}:${tag} ${image}:hello"
+            sh "podman push  ${image}:hello"    
+          }
+        }
+      }
+    }
+
+		stage( "Clean Up Existing Deployments" ) {
+      steps {
+        container('kubectl') {
+          sh "kubectl delete deployments -n ${namespace} --selector=${selector_key}=${selector_val}"
+        }
+      }
+		}
+
+		// Deploy App to Cluster in Kubernetes
+		stage( "Deploy to Cluster" ) {
+      steps {
+        container('kubectl') {
+          sh "kubectl apply -n ${namespace} -f ${deployment}"
+          sh "sleep 5"
+          sh "kubectl apply -n ${namespace} -f ${service}"
+        }
+      }
+		}
+  }
+}

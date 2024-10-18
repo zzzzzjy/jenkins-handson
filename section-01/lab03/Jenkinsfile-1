@@ -1,0 +1,59 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven'
+    }
+    
+    environment {
+        SLACK_CHANNEL = '#jenkins_notification'
+    }
+
+    stages {
+        stage('Start') {
+            steps {
+               echo "STARTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})"
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    mvn -version
+                '''
+            }
+            post {
+                always {
+                    echo 'Test and Build post process !'
+                }
+            }
+        }
+
+        stage('Code Analysis') {
+            steps {
+                echo 'sonar scan ! '
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo 'docker build ! '
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'jenkins sample deploy ! '
+            }
+        }
+
+    }
+    post {
+        success {
+            echo "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})"
+        }
+        failure {
+            echo "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})"
+        }
+    }
+}

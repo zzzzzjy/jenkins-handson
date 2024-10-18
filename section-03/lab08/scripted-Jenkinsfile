@@ -1,0 +1,45 @@
+def issue = [fields: [ project: [key: 'BOOT'],
+                         summary: 'New JIRA Created from Jenkins.',
+                         description: 'New JIRA Created from Jenkins.',
+                         issuetype: [name: 'Task']]]
+  def newIssue = jiraNewIssue issue: issue, site: 'JIRA'
+
+
+void comment_issues(message) {
+    def issue_pattern = "BOOT-\\d+"
+
+    //jiraAddComment idOrKey: 'BOOT-1', comment: message, site: 'JIRA'
+    jiraComment body: message, issueKey: 'BOOT-1'
+
+}
+
+def postSuccess(){
+    println 'This will run only if successful'
+}
+
+def postFailure(e) {
+    println "Failed because of $e"
+    println 'This will run only if failed'
+
+}
+
+def postAlways() {
+    println 'This will always run'
+}
+
+node {
+  try {
+    stage('Hello') {
+        echo 'Hello World'
+    }
+
+    postSuccess()
+  } catch (error) {
+    echo "Error"
+    postFailure(error)
+  } finally {
+    postAlways()
+    comment_issues("${JOB_NAME}:${currentBuild.currentResult}")
+    echo newIssue.data.key
+  }
+}

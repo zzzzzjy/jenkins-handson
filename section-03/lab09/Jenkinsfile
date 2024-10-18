@@ -1,0 +1,68 @@
+pipeline {
+  agent any 
+
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '4'))
+    disableConcurrentBuilds()
+  }
+  
+  tools {
+    maven 'maven'
+  }
+  
+  environment {
+      NEW_VERSION = "1.3.0"
+      dockerRegistry="server1.example.com"
+      tag="0.1.2"
+      image="nexweb1/sample"
+      NEW_IMAGE="server1.example.com/bootcamp/sample"
+  }
+
+  stages {
+    stage("git-clone") {
+      steps {
+        echo "Git clone from gitlab repository"
+        git branch: 'dev', url: 'https://gitlab.com/nexweb/jenkins-handson.git'
+      }
+    }
+
+    stage("build") {
+      steps {
+        echo "Building the application..."   
+        sh "mvn clean package -Dmaven.testSkips=true "
+      }
+    }
+
+    stage("inspect code") {
+      steps {
+        echo "inspecting the application..."
+      }
+    }
+
+    stage("build and push image") {
+      steps {
+        echo "Building and push the image..."
+        withCredentials ([
+          usernamePassword(
+            credentialsId: 'harbor-docker-credentials',
+            usernameVariable: 'DOCKER_HUB_USER', 
+            passwordVariable: 'DOCKER_HUB_PASSWORD'
+          )
+        ]) {
+          echo "some credentials info : ${DOCKER_HUB_USER}, ${DOCKER_HUB_PASSWORD}"
+
+					sh "podman login --tls-verify=false --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${dockerRegistry}"
+					sh "podman build  -t ${image}:${tag} . -f deployment/Dockerfile"
+					sh "podman tag ${image}:${tag} ${NEW_IMAGE}:dev"
+					sh "podman push ${NEW_IMAGE}:dev"    
+        }
+      }
+    }
+
+    stage("deploy") {
+      steps {
+        echo "Deploying the application..."
+      }
+    }
+  }
+}

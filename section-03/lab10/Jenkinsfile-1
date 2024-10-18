@@ -1,0 +1,21 @@
+pipeline {
+    agent any
+
+    tools {
+        jfrog 'jfrog-cli'
+    }
+    
+    stages {
+        stage('Hello') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+        stage('jfrog') {
+            steps {
+                echo "jfrog start"
+                jf 'rt ping --url=http://119.81.103.70:8081/artifactory'
+            }
+        }
+    }
+}

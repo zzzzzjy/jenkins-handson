@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:  # list of containers that you want present for your build, you can define a default container in the Jenkinsfile
+  
     - name: maven
       image: maven:alpine
       command: ["tail", "-f", "/dev/null"]  # this or any command that is bascially a noop is required, this is so that you don't overwrite the entrypoint of the base container
@@ -9,17 +10,11 @@ spec:
       volumeMounts:
         - name: maven-repo-vol
           mountPath: /root/.m2
-    - name: docker
-      image: docker:latest
-      imagePullPolicy: Always    
-      command: ["tail", "-f", "/dev/null"]
-      volumeMounts:
-        - name: docker
-          mountPath: /var/run/docker.sock # We use the k8s host docker engine
     - name: git
       image: alpine/git
       imagePullPolicy: Always 
       command: ["tail", "-f", "/dev/null"] 
+      tty: true
     - name: kubectl
       image: lachlanevenson/k8s-kubectl
       imagePullPolicy: Always     
@@ -29,18 +24,42 @@ spec:
       image: newtmitch/sonar-scanner
       imagePullPolicy: Always
       command: ["cat"]
+      tty: true   
+    - name: buildah
+      image: quay.io/buildah/stable
+      command:
+      - cat
       tty: true
-    - name: podman
-      image: ibmcase/podman:ubuntu-16.04
+      securityContext:
+        privileged: true
+      volumeMounts:
+      - name: varlibcontainers
+        mountPath: /var/lib/containers
+      - name: docker-credentials
+        mountPath: /tekton/home/.docker        
+      env:
+      - name: DOCKER_CONFIG
+        value: /tekton/home/.docker  
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:debug
       imagePullPolicy: Always
       command: ["cat"]
       tty: true
-      privileged: true
+      volumeMounts:
+        - name: docker-credentials
+          mountPath: /kaniko/.docker 
+
   volumes:
-    - name: docker
-      hostPath:
-        path: /var/run/docker.sock
+    - name: varlibcontainers
+      emptyDir: {}
+    - name: docker-credentials
+      secret:
+        secretName: regcred
+        items:
+          - key: .dockerconfigjson
+            path: config.json    
     - name: maven-repo-vol
       hostPath:
         path: /root/.m2
+    
 
