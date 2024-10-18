@@ -73,18 +73,11 @@ pipeline {
 
    // Build Docker, Push Image to Docker Hub Repository.
     stage("Build & Push Container image") {
-      environment {
-        BUILDVERSION = sh(script: "echo `date +%Y%m%d_%H%M%S -d '+9 hour'`", returnStdout: true).trim()
-      }
-      steps {
 
+      steps {
         container("kaniko") {
           script
           {
-              def IMAGE_TAG =  sh(script: 'echo "dev-$BUILD_NUMBER"', returnStdout: true).trim()
-              
-              env['IMAGE_TAG'] = IMAGE_TAG
-              echo "========= imageTag:${BUILDVERSION}"
               sh "pwd"
               sh "ls -al"
               sh '''
