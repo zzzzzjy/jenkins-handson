@@ -52,7 +52,7 @@ pipeline {
               env['ingress'] = props['ingress']
               env['selector_key'] = props['selector_key']
               env['selector_val'] = props['selector_val']
-              env['namespace'] = 'education'
+              env['namespace'] = 'education-user01'
               env['apiserver'] = props['ibm-cloud-apiserver']
         }
       }
