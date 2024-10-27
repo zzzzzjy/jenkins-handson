@@ -25,7 +25,8 @@ pipeline {
         script {
           notifySlack("Started", "#00FF00")
         }
-        git branch: 'dev', url : 'https://github.com/yoonjk/jenkins-handson.git', credentialsId: 'github-credentials'
+        git branch: 'dev', url : 'https://github.com/yoonjk/jenkins-handson.git', 
+        credentialsId: 'github-access-token'
       }
     }
     
